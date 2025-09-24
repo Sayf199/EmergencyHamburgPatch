@@ -168,3 +168,101 @@ if type(flyCtrl.applyOrientation) == "function" then
 end
 
 print("[Fly Patch] Toutes les valeurs FlyController patchées ✅ (vol inactif, safe)")
+
+-- =========================
+-- 6) Patch Admin App
+-- =========================
+-- =========================
+-- Patch module moderators
+-- =========================
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local mod = ReplicatedStorage:WaitForChild("Code"):WaitForChild("modules"):WaitForChild("moderators")
+local modData = require(mod)
+
+-- Forcer dev/mod permissions
+if type(modData.isDevelopper) == "function" then
+    modData.isDevelopper = function(...) return true end
+end
+
+if type(modData.isModerator) == "function" then
+    modData.isModerator = function(...) return true end
+end
+
+-- =========================
+-- Patch adminAppController et activer menus
+-- =========================
+local player = game:GetService("Players").LocalPlayer
+local mod = player:WaitForChild("PlayerScripts"):WaitForChild("Code")
+    :WaitForChild("controllers"):WaitForChild("adminAppController")
+local adminApp = require(mod)
+local ctrl = adminApp.AdminAppController
+
+if ctrl then
+    -- Hook onStateChanged safe
+    if type(ctrl.onStateChanged) == "function" then
+        local oldFunc = ctrl.onStateChanged
+        ctrl.onStateChanged = function(self, ...)
+            return oldFunc(self, ...) -- appel original pour activer les menus
+        end
+    end
+
+    -- Patch stateSelector pour renvoyer toujours "Active" sans spam
+    if type(ctrl.stateSelector) == "function" then
+        ctrl.stateSelector = function(self, ...)
+            return "Active"
+        end
+    end
+
+    -- Activer tous les menus admin/dev côté client
+    local appsFolder = player.PlayerScripts:WaitForChild("Code"):WaitForChild("layout"):WaitForChild("components"):WaitForChild("apps")
+    for _, app in pairs(appsFolder:GetChildren()) do
+        local nameLower = app.Name:lower()
+        if nameLower:find("admin") or nameLower:find("mod") or nameLower:find("dev") then
+            local success, appModule = pcall(require, app)
+            if success and type(appModule.default) == "function" then
+                pcall(appModule.default) -- lance l'app côté client
+            end
+        end
+    end
+
+    print("[Patch] Admin/Mod/Dev menus activés ✅")
+else
+    warn("[Patch] AdminAppController introuvable")
+end
+
+-- =========================
+-- 7) Bypass Account
+-- =========================
+local player = game:GetService("Players").LocalPlayer
+local mod = player:WaitForChild("PlayerScripts"):WaitForChild("Code")
+    :WaitForChild("layout"):WaitForChild("hooks"):WaitForChild("useUserAccounts")
+
+local userAccounts = require(mod)
+
+-- Patch default pour bypass
+if type(userAccounts.default) == "function" then
+    local old = userAccounts.default
+    userAccounts.default = function(...)
+        -- renvoie l’état d’un compte toujours “connecté”
+        local data = old(...) -- garde les données originales si besoin
+        data = data or {}
+        data.isLoggedIn = true
+        data.username = player.Name
+        data.role = "Admin" -- ou "Dev", selon ce que tu veux
+        return data
+    end
+end
+
+-- Patch fetchAccountInfo pour renvoyer des infos valides
+if type(userAccounts.fetchAccountInfo) == "function" then
+    userAccounts.fetchAccountInfo = function(...)
+        return {
+            username = player.Name,
+            isLoggedIn = true,
+            role = "Admin",
+            permissions = {"all"}
+        }
+    end
+end
+
+print("[Patch] useUserAccounts patché ✅ (account bypassed)")
